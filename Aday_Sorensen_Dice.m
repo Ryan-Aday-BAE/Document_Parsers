@@ -1,19 +1,15 @@
 clear all; clc;
 warning('off');
 
-fprintf("Ryan Aday\nDamareau Levenshtein File Comparer\n");
-fprintf("Version 1.2: 06/05/2024\n");
-fprintf("Using parfor for faster computing.\n");
-fprintf("NOTE: Run this for either long or short string of text." + ...
-    "\nThis looks for the magnitude of changes needed to " + ...
-    "convert one string to the other. ..." + ...
-    "\nDownside is speed relative to the size of dataesets fed.\n");
+fprintf("Ryan Aday\nDSorensen Dice File Comparer\n");
+fprintf("Version 1.0: 06/05/2024\n");
+fprintf("NOTE: Run this for long strings of text only." + ...
+    "\nThis fails to accurately map for smaller string " + ...
+    "sizes due to higher significance for matched pairs" + ...
+    "relative to overall size.\n");
 
 % Specify the folder containing the .csv files
 folderPath = 'C:\Users\ryan.aday\Documents\DOORS DB\20240531\';
-
-% Specify tolerance for matches
-DL_tol = 0.5;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -31,8 +27,8 @@ compareData = readtable(compareFile);
 % Extract the second column (main_2)
 main_2 = mainData{:, 4};
 main_2_idx = mainData{:, 1};
-compare_1 = compareData{:, 2}; %%%HACK TO SPEED THINGS UP, CHANGE!!!
-compare_1_idx = compareData{:, 1}; %%%HACK TO SPEED THINGS UP, CHANGE!!!
+compare_1 = compareData{29:493, 2}; %%%HACK TO SPEED THINGS UP, CHANGE!!!
+compare_1_idx = compareData{29:493, 1}; %%%HACK TO SPEED THINGS UP, CHANGE!!!
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Data Manipulation for different files, commented out
@@ -77,40 +73,38 @@ fprintf("\nParcluster created.\n");
 tic 
 
 % Iterate through each row of main_2
-fprintf("\nPerforming Damareau Levenshtein (O(m*n/prll processes) time)...\n\n");
+fprintf("\nPerforming Srenstein Dice (O(n/prll processes) time)...\n\n");
 parfor i = 1:length(main_2)
     % Compare main_2 with all rows of compare1 (from other .csv file)
     % Implement Damerau-Levenshtein algorithm here (you can use external functions)
     % Find the most similar row in compare1
-
+       
+    % Iterate for the absolute minDist between all compare_1 
     main_row = main_2(i);
     if length(char(main_row)) < 5 | ...
             contains(char(main_row), 'figure', 'IgnoreCase', true)
     else
-        min_dist = inf;
-        min_dist_idx = -1;
+        max_corr = -inf;
+        max_corr_idx = -1;
            
-        % Iterate for the absolute minDist between all compare_1 
         for j = 1:length(compare_1)
-            DL_length = lev(char(main_row), char(compare_1(j)));
+            corr = sSimilarity(char(main_row), char(compare_1(j)));
             %DL_length = compareMBLeven(char(main_row), char(compare_1(j)), false);
 
             % In-built function, too damned slow...
             %DL_length = editDistance(char(main_row), char(compare_1(j)), 'InsertCost',Inf,'DeleteCost',Inf); 
             
             if ...%abs(length(char(main_row)) - length(char(compare_1(j)))) > 20 || ...
-                     DL_length < min_dist
-                min_dist = DL_length;
-                min_dist_idx = j;
+                     corr > max_corr
+                max_corr = corr;
+                max_corr_idx = j;
             end
         end
     
         % For demonstration purposes, let's assume the most similar row is 'similarRow'
-        if min_dist <= DL_tol
-            similarRows{i} = char(compare_1(min_dist_idx));
-            similarRowsIdx{i} = compare_1_idx(min_dist_idx);
-            distance{i} = min_dist;
-        end
+        similarRows{i} = char(compare_1(max_corr_idx));
+        similarRowsIdx{i} = compare_1_idx(max_corr_idx);
+        distance{i} = max_corr;
 
     end
 
@@ -126,7 +120,7 @@ toc
 outputTable = table(main_2_idx, main_2, similarRows, similarRowsIdx, ...
     distance, ...
     'VariableNames', {'main_2_idx', 'main_2', 'compare_1', ...
-    'compare_1_idx', 'distance'});
+    'compare_1_idx', 'max_correlation'});
 %{
 outputTable = table(main_2_idx, main_2_cat, main_2, similarRows, similarRowsIdx, compare_1_cat,...
     'VariableNames', {'main_2_idx', 'main_2_cat', 'main_2', 'compare_1', 'compare_1_idx', 'compare_1_cat'});
@@ -145,31 +139,29 @@ clearvars -except outputTable compare_1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function similarity = sSimilarity(sa1, sa2)
+    % Compare two strings to see how similar they are.
+    % Answer is returned as a value from 0 - 1.
+    % 1 indicates a perfect similarity (100%) while 0 indicates no similarity (0%).
+    % Algorithm is set up to closely mimic the mathematical formula from
+    % the article describing the algorithm, for clarity.
+    % Algorithm source site: http://www.catalysoft.com/articles/StrikeAMatch.html
 
-% https://blogs.mathworks.com/cleve/2017/08/14/levenshtein-edit-distance-between-strings/
-function d = lev(s,t)
-% Levenshtein distance between strings or char arrays.
-% lev(s,t) is the number of deletions, insertions,
-% or substitutions required to transform s to t.
-% https://en.wikipedia.org/wiki/Levenshtein_distance
+    % Convert input strings to lowercase and remove whitespace
+    %s1 = regexprep(sa1, '\s', '');
+    %s2 = regexprep(sa2, '\s', '');
 
-    s = char(s);
-    t = char(t);
-    m = length(s);
-    n = length(t);
-    x = 0:n;
-    y = zeros(1,n+1);   
-    for i = 1:m
-        y(1) = i;
-        for j = 1:n
-            c = (s(i) ~= t(j)); % c = 0 if chars match, 1 if not.
-            y(j+1) = min([y(j) + 1
-                          x(j+1) + 1
-                          x(j) + c]);
-        end
-        % swap
-        [x,y] = deal(y,x);
-    end
-    d = x(n+1)/m;
+    % Get pairs of adjacent letters in each string
+    pairs_s1 = sa1(1:end-1) + sa1(2:end);
+    pairs_s2 = sa2(1:end-1) + sa2(2:end);
+
+    % Calculate intersection of pairs
+    common_pairs = intersect(pairs_s1, pairs_s2);
+
+    % Calculate similarity
+    similarity_num = 2 * numel(common_pairs);
+    similarity_den = numel(pairs_s1) + numel(pairs_s2);
+    similarity = similarity_num / similarity_den;
 end
+
 
