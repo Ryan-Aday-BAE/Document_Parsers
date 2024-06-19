@@ -1,5 +1,27 @@
-import os
-import csv
+'''
+Ryan Aday
+doc2csv.py
+
+Version 1.0: 06/19/2024
+
+Objective:
+- Read all .docx within the directory where this is pasted tobytes
+- Create a .csv file with 'Text' and 'Header' columns:
+    - Text-  All sentences present within document
+    - Header- The appropriate assigned header to each sentences
+    - .csv file is named "output.csv", present in the same directory as this program
+
+Nuances:
+- Deletes all files with "~"
+    - These are cached files, and will not be interpreted incorrectly by python-docx
+- Requires the following libraries:
+        python-docx (Needed for parsing through .docx documents)
+        os  (Need for file name recogni
+        csv (Needed for .csv editability)
+        concurrent  (This is for multithreading)
+'''
+
+import os, csv
 from docx import Document
 from docx.shared import Pt
 from concurrent.futures import ThreadPoolExecutor
