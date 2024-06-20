@@ -15,12 +15,14 @@ def printHeader():
     Nuances:
     - Deletes all files with "~"
         - These are cached files, and will not be interpreted incorrectly by python-docx
+    - Deletes all sentences with unique headers (classification stratification)
     - Requires the following libraries:
             python-docx (Needed for parsing through .docx documents)
             os  (Need for file name recogni
-            csv (Needed for .csv editability)
+            pandas (Need for dataframe, csv write)
+            numpy (Need for NaN removal)
             concurrent  (This is for multithreading)
-            tqdm (progress bar)
+            tqdm (This is for the progress bar)
     """)
 
 def process_docx(file_path):
@@ -35,8 +37,8 @@ def process_docx(file_path):
             header = para.text
         elif not para.style.name.startswith(("table", "toc")) and para.text.strip():
             for sentence in re.split(r'(?<=\.) ', para.text.strip()):
-                if not header is None:
-                    rows.append((sentence, header))
+                #if not header is None:
+                rows.append((sentence, header))
 
     return rows
 
@@ -59,13 +61,24 @@ def main(input_folder, output_csv):
 
     # Force utf-8 encoding to prevent misinterpreted characters.
     with open(output_csv, 'w', newline='', encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['Text', 'Header'])
-        writer.writerows(all_rows)
+        #writer = csv.writer(csvfile)
+        #writer.writerow(['Text', 'Header'])
+        df = pd.DataFrame(all_rows, columns=['Text', 'Header'])
+        df.replace('', np.nan, inplace=True)
+        #df = df.replace(r'[^\w\s]|_', '', regex=True)
+        df.drop_duplicates(subset=['Text'], keep="first", inplace=True)
+        #df = df.apply(lambda x: x.astype(str).str.lower()).drop_duplicates(subset=['Text'], keep='first')
+        df.dropna(inplace=True)        
+        df = df[df.duplicated(subset=['Header'], keep=False)]
+        df.to_csv(csvfile, encoding='utf-8', index=False)
+        #all_rows = df.values.toList()       
+        #writer.writerows(all_rows)
 
 if __name__ == '__main__':
     try:
         import os, csv, re
+        import pandas as pd
+        import numpy as np
         from docx import Document
         from docx.shared import Pt
         from concurrent.futures import ThreadPoolExecutor
@@ -75,7 +88,7 @@ if __name__ == '__main__':
         sys.exit("""
             You need the os, csv, docx, and concurrent libraries.
             To install these libraries, please type:
-            pip install os csv python-docx concurrent tqdm textwrap
+            pip install pandas os csv python-docx concurrent tqdm textwrap
             """)
 
     input_folder = os.getcwd()
